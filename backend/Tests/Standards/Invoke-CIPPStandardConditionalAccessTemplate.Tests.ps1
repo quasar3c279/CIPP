@@ -19,7 +19,7 @@ BeforeAll {
     function Get-CippTable { [CmdletBinding()] param($tablename) }
     function Get-CippAzDataTableEntity { [CmdletBinding()] param($Table, $Filter) }
     function ConvertTo-CIPPODataFilterValue { [CmdletBinding()] param([AllowEmptyString()][string]$Value, $Type) $Value }
-    function New-CIPPCAPolicy { [CmdletBinding()] param($replacePattern, $TenantFilter, $state, $RawJSON, $Overwrite, $APIName, $Headers, $DisableSD, $CreateGroups, $PreloadedCAPolicies, $PreloadedLocations, $PreloadedSecurityDefaults) }
+    function New-CIPPCAPolicy { [CmdletBinding()] param($replacePattern, $TenantFilter, $state, $RawJSON, $Overwrite, $APIName, $Headers, $DisableSD, $CreateGroups, $NamedLocationsCreateOnly, $PreloadedCAPolicies, $PreloadedLocations, $PreloadedSecurityDefaults) }
     function New-CIPPCATemplate { [CmdletBinding()] param($TenantFilter, $JSON, $preloadedLocations) }
     function Compare-CIPPIntuneObject { [CmdletBinding()] param($ReferenceObject, $DifferenceObject, $CompareType) }
     function Write-LogMessage { [CmdletBinding()] param($API, $tenant, $Tenant2, $message, $sev, $headers) }
@@ -139,5 +139,30 @@ Describe 'Invoke-CIPPStandardConditionalAccessTemplate template resolution' {
 
         $script:deployCalls | Should -Be 0
         ($script:logs | Where-Object { $_.Message -match 'Failed to create or update conditional access rule' }) | Should -BeNullOrEmpty
+    }
+
+    It 'passes NamedLocationsCreateOnly through to New-CIPPCAPolicy when enabled' {
+        Mock -CommandName Get-CippAzDataTableEntity -MockWith { @([pscustomobject]@{ RowKey = 'template-guid'; GUID = 'template-guid'; JSON = $script:TemplateJson }) }
+
+        $Settings = [pscustomobject]@{
+            remediate                = $true
+            NamedLocationsCreateOnly = $true
+            TemplateList             = [pscustomobject]@{ label = 'CA004: Require login from inside Netherlands'; value = 'template-guid' }
+        }
+        Invoke-CIPPStandardConditionalAccessTemplate -Tenant $script:Tenant -Settings $Settings
+
+        Should -Invoke New-CIPPCAPolicy -Times 1 -Exactly -ParameterFilter { $NamedLocationsCreateOnly -eq $true -and $Overwrite -eq $true }
+    }
+
+    It 'defaults NamedLocationsCreateOnly to off for standards saved before the option existed' {
+        Mock -CommandName Get-CippAzDataTableEntity -MockWith { @([pscustomobject]@{ RowKey = 'template-guid'; GUID = 'template-guid'; JSON = $script:TemplateJson }) }
+
+        $Settings = [pscustomobject]@{
+            remediate    = $true
+            TemplateList = [pscustomobject]@{ label = 'CA004: Require login from inside Netherlands'; value = 'template-guid' }
+        }
+        Invoke-CIPPStandardConditionalAccessTemplate -Tenant $script:Tenant -Settings $Settings
+
+        Should -Invoke New-CIPPCAPolicy -Times 1 -Exactly -ParameterFilter { $NamedLocationsCreateOnly -eq $false }
     }
 }

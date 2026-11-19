@@ -27,6 +27,8 @@ function Resolve-CIPPCADependencies {
         $AllAuthStrengthPolicies = $null,
         $AllAuthContexts = $null,
         $Overwrite = $true,
+        # Named location display names that are created when missing but never PATCHed when they exist.
+        [string[]]$CreateOnlyLocations = @(),
         $Headers,
         $APIName = 'CA Dependency Reconciliation'
     )
@@ -152,7 +154,9 @@ function Resolve-CIPPCADependencies {
                     $locationExists = $ExistingLocation.Count -gt 0
                     if ($locationExists) {
                         $ExistingLocation = $ExistingLocation[0]
-                        if ($Overwrite) {
+                        if ($Name -in $CreateOnlyLocations) {
+                            Write-LogMessage -Tenant $TenantFilter -Headers $Headers -API $APIName -message "Matched existing named location, not overwritten (createOnly): $Name" -Sev 'Info'
+                        } elseif ($Overwrite) {
                             $LocationUpdate = $location | Select-Object * -ExcludeProperty id
                             Remove-ODataProperties -Object $LocationUpdate
                             $Body = ConvertTo-Json -InputObject $LocationUpdate -Depth 10

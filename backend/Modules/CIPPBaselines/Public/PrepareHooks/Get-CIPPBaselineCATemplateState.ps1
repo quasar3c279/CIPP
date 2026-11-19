@@ -19,7 +19,8 @@ function Get-CIPPBaselineCATemplateState {
         - locations translate GUID->displayName via the template's LocationInfo plus the
           tenant NamedLocations cache; All/AllTrusted pass through
         - named locations the template defines and the policy references also grade by
-          content (namedLocations), against the location the live policy is bound to
+          content (namedLocations), against the location the live policy is bound to;
+          with namedLocationsCreateOnly they grade by presence only (deploy never rewrites them)
         - users/groups translate GUID->displayName via the Users/Groups caches, then one live
           directoryObjects/getByIds for ids those caches do not hold yet; still-unresolved
           GUIDs stay GUIDs so raw-GUID templates still match
@@ -52,6 +53,7 @@ function Get-CIPPBaselineCATemplateState {
     $Unwrap = { param($Value) if ($Value -is [System.Management.Automation.PSCustomObject] -and $null -ne $Value.value) { $Value.value } else { $Value } }
     $TemplateRef = "$(& $Unwrap $Variables.caTemplate)"
     $ConfiguredState = "$(& $Unwrap $Variables.state)".ToLower()
+    $NamedLocationsCreateOnly = "$(& $Unwrap $Variables.namedLocationsCreateOnly)" -eq 'true'
 
     # --- the stored template: by GUID (RowKey, then GUID column), displayName as legacy fallback
     $Table = Get-CippTable -tablename 'templates'
@@ -298,6 +300,13 @@ function Get-CIPPBaselineCATemplateState {
         $Keys = @('ipRanges', 'isTrusted', 'countriesAndRegions', 'includeUnknownCountriesAndRegions', 'countryLookupMethod').Where({ $null -ne $Location.$_ })
         $Named = @($TenantLocations.Where({ $_.displayName -eq $Location.displayName }))
         $Bound = @($Named.Where({ $_.id -in $BoundIds }))[0] ?? $Named[0]
+        if ($NamedLocationsCreateOnly) {
+            # Create-only deploys reference an existing location as-is, so its tenant-specific content is
+            # not drift. A missing location still drifts, and remediation creates it from the template.
+            $ExpectedLocations[$Location.displayName] = 'Present'
+            $CurrentLocations[$Location.displayName] = if ($Bound) { 'Present' }
+            continue
+        }
         $ExpectedLocations[$Location.displayName] = & $Shape $Location
         $CurrentLocations[$Location.displayName] = if ($Bound) { & $Shape $Bound }
     }

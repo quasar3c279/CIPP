@@ -266,13 +266,15 @@ Describe 'Get-CIPPBaselineCATemplateState' {
                     [pscustomobject]@{ RowKey = 'clientallowlocations'; Value = $ClientAllow; VariableType = 'list' }
                 )
             }
-            function Get-LocationDrift([string[]]$BoundIds) {
+            function Get-LocationDrift([string[]]$BoundIds, [switch]$CreateOnly) {
                 $script:LivePolicy = [pscustomobject]@{
                     displayName = 'Location test policy'
                     state       = 'disabled'
                     conditions  = [pscustomobject]@{ users = [pscustomobject]@{ includeUsers = @('All') }; locations = [pscustomobject]@{ includeLocations = @('All'); excludeLocations = $BoundIds } }
                 }
-                $State = Get-CIPPBaselineCATemplateState -Item @{ Variables = @{ caTemplate = 'tpl-1'; state = 'donotchange' } } -TenantFilter 'customer.example.com'
+                $Variables = @{ caTemplate = 'tpl-1'; state = 'donotchange' }
+                if ($CreateOnly) { $Variables.namedLocationsCreateOnly = $true }
+                $State = Get-CIPPBaselineCATemplateState -Item @{ Variables = $Variables } -TenantFilter 'customer.example.com'
                 [pscustomobject]@{
                     State       = $State
                     Differences = @(Compare-CIPPIntuneObject -ReferenceObject $State.Expected -DifferenceObject $State.Current | Where-Object { $_ })
@@ -321,6 +323,22 @@ Describe 'Get-CIPPBaselineCATemplateState' {
             $Result = Get-LocationDrift 'loc-office', 'loc-countries', 'loc-client'
             @($Result.State.Expected.namedLocations.PSObject.Properties.Name) | Should -Be @('Office IPs', 'Allowed Countries')
             $Result.Differences | Should -BeNullOrEmpty
+        }
+
+        It 'does not grade tenant-specific content of an existing location with namedLocationsCreateOnly' {
+            # Tenant extended the template's list (extra range) - kept on deploy, so not drift.
+            $script:TenantLocations = @((New-IpLocation 'loc-office' 'Office IPs' '198.51.100.10/32', '203.0.113.0/24', '192.0.2.0/24'), $script:Countries)
+            (Get-LocationDrift 'loc-office', 'loc-countries').Differences | Should -Not -BeNullOrEmpty
+            $Result = Get-LocationDrift 'loc-office', 'loc-countries' -CreateOnly
+            $Result.State.Expected.namedLocations.'Office IPs' | Should -Be 'Present'
+            $Result.Differences | Should -BeNullOrEmpty
+        }
+
+        It 'still drifts with namedLocationsCreateOnly when a defined location is missing from the tenant' {
+            $script:TenantLocations = @($script:Countries)
+            $Result = Get-LocationDrift 'loc-countries' -CreateOnly
+            $Result.State.Current.namedLocations.'Office IPs' | Should -BeNullOrEmpty
+            $Result.Differences | Should -Not -BeNullOrEmpty
         }
 
         It 'drops an empty list variable from the references' {

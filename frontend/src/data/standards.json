@@ -7407,7 +7407,12 @@
         "name": "DisableSD",
         "label": "Disable Security Defaults when deploying policy"
       },
-      { "type": "switch", "name": "CreateGroups", "label": "Create groups if they do not exist" }
+      { "type": "switch", "name": "CreateGroups", "label": "Create groups if they do not exist" },
+      {
+        "type": "switch",
+        "name": "NamedLocationsCreateOnly",
+        "label": "Create named locations if they do not exist (do not overwrite existing)"
+      }
     ],
     "requiredCapabilities": ["AAD_PREMIUM", "AAD_PREMIUM_P2"]
   },

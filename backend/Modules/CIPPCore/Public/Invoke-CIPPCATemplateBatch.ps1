@@ -244,13 +244,20 @@ function Invoke-CIPPCATemplateBatch {
 
     # ---- Reconcile shared dependencies ONCE, only for the policies we will actually deploy ----
     $DeployObjects = [System.Collections.Generic.List[object]]::new()
+    # Locations are shared across templates: one defined by any create-only template is never overwritten.
+    $CreateOnlyLocations = [System.Collections.Generic.List[string]]::new()
     foreach ($ct in $CATemplates) {
-        if ($ct.NeedsRemediation) { $DeployObjects.Add(($ct.RawJSON | ConvertFrom-Json)) }
+        if (-not $ct.NeedsRemediation) { continue }
+        $DeployObject = $ct.RawJSON | ConvertFrom-Json
+        $DeployObjects.Add($DeployObject)
+        if ($ct.Settings.NamedLocationsCreateOnly -eq $true) {
+            foreach ($Location in @($DeployObject.LocationInfo)) { if ($Location.displayName) { $CreateOnlyLocations.Add($Location.displayName) } }
+        }
     }
     $DependencyMap = $null
     if ($DeployObjects.Count -gt 0) {
         try {
-            $DependencyMap = Resolve-CIPPCADependencies -TenantFilter $Tenant -PolicyObjects $DeployObjects -AllNamedLocations $PreloadedLocations -AllAuthStrengthPolicies $PreloadedAuthStrengths -Overwrite $true -Headers $Headers -APIName 'Standards'
+            $DependencyMap = Resolve-CIPPCADependencies -TenantFilter $Tenant -PolicyObjects $DeployObjects -AllNamedLocations $PreloadedLocations -AllAuthStrengthPolicies $PreloadedAuthStrengths -Overwrite $true -CreateOnlyLocations $CreateOnlyLocations -Headers $Headers -APIName 'Standards'
         } catch {
             $ErrorMessage = Get-NormalizedError -Message $_.Exception.Message
             Write-LogMessage -API 'Standards' -tenant $Tenant -message "Failed to reconcile Conditional Access dependencies for $Tenant. Error: $ErrorMessage" -sev 'Error'

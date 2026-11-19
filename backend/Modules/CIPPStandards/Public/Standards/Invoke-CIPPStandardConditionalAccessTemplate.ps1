@@ -28,6 +28,7 @@ function Invoke-CIPPStandardConditionalAccessTemplate {
             {"name":"state","label":"What state should we deploy this template in?","type":"radio","options":[{"value":"donotchange","label":"Do not change state"},{"value":"Enabled","label":"Set to enabled"},{"value":"Disabled","label":"Set to disabled"},{"value":"enabledForReportingButNotEnforced","label":"Set to report only"}]}
             {"type":"switch","name":"DisableSD","label":"Disable Security Defaults when deploying policy"}
             {"type":"switch","name":"CreateGroups","label":"Create groups if they do not exist"}
+            {"type":"switch","name":"NamedLocationsCreateOnly","label":"Create named locations if they do not exist (do not overwrite existing)"}
         REQUIREDCAPABILITIES
             "AAD_PREMIUM"
             "AAD_PREMIUM_P2"
@@ -99,6 +100,7 @@ function Invoke-CIPPStandardConditionalAccessTemplate {
                 APIName                   = 'Standards'
                 DisableSD                 = $Settings.DisableSD
                 CreateGroups              = $Settings.CreateGroups ?? $false
+                NamedLocationsCreateOnly  = $Settings.NamedLocationsCreateOnly ?? $false
                 PreloadedCAPolicies       = $AllCAPolicies
                 PreloadedLocations        = $PreloadedLocations
                 PreloadedSecurityDefaults = $PreloadedSecurityDefaults
