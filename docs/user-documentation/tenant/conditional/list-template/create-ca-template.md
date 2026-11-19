@@ -180,8 +180,10 @@ There is no resync action. Bring the ranges up to date on [edit.md](edit.md "men
 On deployment, each of the template's named locations is matched to one of the same display name in the target tenant. Where the deployment overwrites, that location is rewritten to the template's stored values; otherwise the tenant's existing location is left as it is and referenced by the policy. **Overwrite Existing Policy** in the deploy drawer controls this for a manual deployment.
 
 {% hint style="warning" %}
-A template applied through a standard always overwrites. Correcting a customer tenant's named location directly on [README.md](../list-named-locations/README.md "mention") is undone the next time that standard runs, so correct the ranges on the template instead.
+A template applied through a standard overwrites by default. Correcting a customer tenant's named location directly on [README.md](../list-named-locations/README.md "mention") is undone the next time that standard runs, so correct the ranges on the template instead.
 {% endhint %}
+
+To keep tenant-specific named locations, such as an allowed-countries list extended for one customer, turn on **Create named locations if they do not exist (do not overwrite existing)** on the Conditional Access Template standard, or on the Conditional Access Template and Conditional Access Template Package baselines. A named location the tenant does not have is still created from the template, but one that already exists with the same display name is referenced as it is and never rewritten, and its contents are not reported as drift.
 
 {% hint style="info" %}
 A template deployed to a tenant is not linked to it afterwards. Editing the template later does not change policies already deployed from it, unless the template is applied through a standard, which redeploys on drift.
