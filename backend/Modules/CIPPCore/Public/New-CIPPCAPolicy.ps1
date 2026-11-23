@@ -8,6 +8,7 @@ function New-CIPPCAPolicy {
         $ReplacePattern = 'none',
         $DisableSD = $false,
         $CreateGroups = $false,
+        $NamedLocationsCreateOnly = $false,
         $APIName = 'Create CA Policy',
         $Headers,
         $PreloadedCAPolicies = $null,
@@ -327,7 +328,9 @@ function New-CIPPCAPolicy {
                     Write-LogMessage -Tenant $TenantFilter -Headers $Headers -API $APIName -message "Multiple named locations found with display name '$($Location.displayName)'. Using first match: $($ExistingLocation[0].id)" -Sev 'Warning'
                 }
                 $ExistingLocation = $ExistingLocation[0]
-                if ($Overwrite) {
+                if ($NamedLocationsCreateOnly) {
+                    Write-LogMessage -Tenant $TenantFilter -Headers $Headers -API $APIName -message "Matched existing named location, not overwritten (createOnly): $($location.displayName)" -Sev 'Info'
+                } elseif ($Overwrite) {
                     $LocationUpdate = $location | Select-Object * -ExcludeProperty id
                     Remove-ODataProperties -Object $LocationUpdate
                     $Body = ConvertTo-Json -InputObject $LocationUpdate -Depth 10

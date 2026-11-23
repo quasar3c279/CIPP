@@ -52,7 +52,8 @@ BeforeAll {
         throw "Unexpected live Graph GET in test: $uri"
     }
     function New-GraphBulkRequest { [CmdletBinding()] param($Requests, $tenantid, $asapp) @() }
-    function Write-LogMessage { [CmdletBinding()] param($API, $tenant, $TenantFilter, $Headers, $message, $sev, $LogData) }
+    function Write-LogMessage { [CmdletBinding()] param($API, $tenant, $TenantFilter, $Headers, $message, $sev, $LogData) $script:LogMessages.Add($message) }
+    $script:LogMessages = [System.Collections.Generic.List[string]]::new()
     function Get-CippException { [CmdletBinding()] param($Exception) [pscustomobject]@{ NormalizedError = "$Exception" } }
     function Get-CIPPTable { [CmdletBinding()] param($tablename) @{} }
     function Get-CIPPAzDataTableEntity { [CmdletBinding()] param($filter) @() }
@@ -89,10 +90,10 @@ BeforeAll {
 }
 '@
 
-    function Invoke-Deploy ($Locations) {
+    function Invoke-Deploy ($Locations, [switch]$CreateOnly) {
         $script:GraphWrites = [System.Collections.Generic.List[object]]::new()
         $null = New-CIPPCAPolicy -RawJSON $script:TemplateJSON -TenantFilter 'customer.example.ch' `
-            -State 'disabled' -Overwrite $true -ReplacePattern 'none' `
+            -State 'disabled' -Overwrite $true -ReplacePattern 'none' -NamedLocationsCreateOnly $CreateOnly.IsPresent `
             -PreloadedCAPolicies @([pscustomobject]@{ id = 'other-id'; displayName = 'Unrelated policy' }) `
             -PreloadedLocations $Locations
         $PolicyWrite = $script:GraphWrites | Where-Object { $_.Uri -eq 'https://graph.microsoft.com/beta/identity/conditionalAccess/policies' } | Select-Object -Last 1
@@ -145,6 +146,66 @@ Describe 'New-CIPPCAPolicy with custom variables in the named-location path' {
                 })
             $Creates.Count | Should -Be 1
             ($Creates[0].Body | ConvertFrom-Json).displayName | Should -Be 'SLY_Lupfig-03'
+        }
+
+        It 'sends the new location GUID in excludeLocations' {
+            @($script:Result.PolicyBody.conditions.locations.excludeLocations) | Should -Be @('22222222-2222-2222-2222-222222222222')
+        }
+    }
+
+    Context 'NamedLocationsCreateOnly: the location already exists in the tenant' {
+        BeforeAll {
+            $script:LogMessages.Clear()
+            $script:Existing = [pscustomobject]@{ id = '11111111-1111-1111-1111-111111111111'; displayName = 'SLY_Lupfig-03' }
+            $script:Result = Invoke-Deploy @($script:Existing) -CreateOnly
+        }
+
+        It 'does not overwrite the existing location, even though Overwrite is set' {
+            @($script:Result.Writes | Where-Object { $_.Uri -match 'namedLocations/' -and $_.Type -eq 'PATCH' }).Count | Should -Be 0
+        }
+
+        It 'does not create a duplicate named location' {
+            @($script:Result.Writes | Where-Object {
+                    $_.Uri -eq 'https://graph.microsoft.com/beta/identity/conditionalAccess/namedLocations' -and $_.Type -eq 'POST'
+                }).Count | Should -Be 0
+        }
+
+        It 'sends the existing location GUID in excludeLocations' {
+            @($script:Result.PolicyBody.conditions.locations.excludeLocations) | Should -Be @('11111111-1111-1111-1111-111111111111')
+        }
+
+        It 'logs that the location was matched and not overwritten' {
+            $script:LogMessages | Should -Contain 'Matched existing named location, not overwritten (createOnly): SLY_Lupfig-03'
+        }
+    }
+
+    Context 'NamedLocationsCreateOnly: duplicate display names in the tenant' {
+        BeforeAll {
+            $script:LogMessages.Clear()
+            $script:Result = Invoke-Deploy @(
+                [pscustomobject]@{ id = '11111111-1111-1111-1111-111111111111'; displayName = 'SLY_Lupfig-03' }
+                [pscustomobject]@{ id = '33333333-3333-3333-3333-333333333333'; displayName = 'SLY_Lupfig-03' }
+            ) -CreateOnly
+        }
+
+        It 'keeps the duplicate warning and uses the first match without overwriting it' {
+            ($script:LogMessages | Where-Object { $_ -match "^Multiple named locations found with display name 'SLY_Lupfig-03'" }) | Should -Not -BeNullOrEmpty
+            @($script:Result.Writes | Where-Object { $_.Type -eq 'PATCH' }).Count | Should -Be 0
+            @($script:Result.PolicyBody.conditions.locations.excludeLocations) | Should -Be @('11111111-1111-1111-1111-111111111111')
+        }
+    }
+
+    Context 'NamedLocationsCreateOnly: the location does not exist yet' {
+        BeforeAll {
+            $script:Result = Invoke-Deploy @([pscustomobject]@{ id = '99999999-9999-9999-9999-999999999999'; displayName = 'SomeOtherLocation' }) -CreateOnly
+        }
+
+        It 'creates the location from the template' {
+            $Creates = @($script:Result.Writes | Where-Object {
+                    $_.Uri -eq 'https://graph.microsoft.com/beta/identity/conditionalAccess/namedLocations' -and $_.Type -eq 'POST'
+                })
+            $Creates.Count | Should -Be 1
+            ($Creates[0].Body | ConvertFrom-Json).ipRanges[0].cidrAddress | Should -Be '203.0.113.0/24'
         }
 
         It 'sends the new location GUID in excludeLocations' {

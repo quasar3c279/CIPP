@@ -102,6 +102,11 @@
       "type": "switch",
       "label": "Create groups if they do not exist",
       "default": false
+    },
+    "namedLocationsCreateOnly": {
+      "type": "switch",
+      "label": "Create named locations if they do not exist (do not overwrite existing)",
+      "default": false
     }
   },
   "expected": {
@@ -126,7 +131,8 @@
     "caTemplate": "%caTemplate%",
     "state": "%state%",
     "disableSD": "%disableSD%",
-    "createGroups": "%createGroups%"
+    "createGroups": "%createGroups%",
+    "namedLocationsCreateOnly": "%namedLocationsCreateOnly%"
   },
   "addedDate": "2023-12-30",
   "appliesToTest": [
